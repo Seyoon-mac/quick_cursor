@@ -227,21 +227,7 @@ summary{font-size:20px;font-weight:650;padding:12px 0;list-style-position:inside
  </div>
 </section>
 
-<!-- ============ 5. 설문 ============ -->
-<section class="screen" id="survey">
- <div class="wrap">
-  <div class="step">마지막 설문</div>
-  <div class="cname" style="font-size:32px">가장 편했던 방식부터 차례로 눌러 주세요</div>
-  <p class="sub">처음 누른 것이 1위(가장 편함)가 됩니다. 다시 누르면 순위가 지워집니다.</p>
-  <div class="rank" id="rankList"></div>
-  <div class="scale"><span>1 = 가장 편함</span><span id="scaleMax"></span></div>
-  <label class="f" for="comment" style="margin-top:24px">하고 싶은 말 (선택)</label>
-  <textarea id="comment" rows="3"></textarea>
-  <button class="btn big" id="surveyGo" disabled>저장하고 마치기</button>
- </div>
-</section>
-
-<!-- ============ 6. 종료 ============ -->
+<!-- ============ 5. 종료 ============ -->
 <section class="screen" id="done">
  <div class="wrap">
   <div class="cname">실험이 끝났습니다</div>
@@ -375,7 +361,7 @@ $('#startBtn').addEventListener('click', () => {
   SES = {
     id: `${pid}_${stamp(d)}`, appVersion: APP_VERSION, participant: pid, hand: chosenHand, note: $('#note').value.trim(),
     started: d.toISOString(), order: o.order, orderMethod: o.method, condIdx: 0,
-    trials: [], orientation: [], survey: null, done: false, lastUpload: null, cfg: cfgCopy,
+    trials: [], orientation: [], done: false, lastUpload: null, cfg: cfgCopy,
     device: { ua: navigator.userAgent, screenW: screen.width, screenH: screen.height, dpr: devicePixelRatio,
               standalone: !!navigator.standalone }
   };
@@ -391,7 +377,7 @@ function checkResume(){
   const box = $('#resumeBox');
   if(s && !s.done){
     box.style.display = 'block';
-    const where = s.condIdx < s.order.length ? `조건 ${s.condIdx + 1}/${s.order.length}부터` : '설문부터';
+    const where = s.condIdx < s.order.length ? `조건 ${s.condIdx + 1}/${s.order.length}부터` : '마지막 조건 완료, 업로드부터';
     $('#resumeText').innerHTML = `<b>${s.participant}</b>의 실험이 중간에 멈춰 있습니다. ${where} 다시 시작할 수 있어요.`;
     $('#resumeBtn').onclick = () => {
       SES = s;
@@ -399,9 +385,9 @@ function checkResume(){
       enableOrientation();
       if(SES.condIdx < SES.order.length){
         const c = SES.order[SES.condIdx];
-        SES.trials = SES.trials.filter(t => t.condition !== c);  // 끊긴 조건은 처음부터
+        SES.trials = SES.trials.filter(t => t.condition !== c);
         saveSes(); goFullscreen(); showIntro();
-      } else showSurvey();
+      } else finishSession();
     };
     $('#resumeDrop').onclick = () => { store('qc_current', null); box.style.display = 'none'; };
   } else box.style.display = 'none';
@@ -470,15 +456,16 @@ const stage = $('#stage'), padEl = $('#pad'), clickEl = $('#clicker'), curEl = $
 let timer = null;
 
 /* ---------- 기기 기울기 ---------- */
-let orientActive = false, orientLast = 0;
+let orientActive = false, orientLast = 0, orientCondStart = null, orientCond = null;
 
 function handleOrientation(e){
-  if(!orientActive || !SES || SES.done) return;
+  if(!orientActive || !SES || SES.done || !orientCondStart) return;
   const t = performance.now();
   if(t - orientLast < 500) return;
   orientLast = t;
   SES.orientation.push([
-    Date.now() - Date.parse(SES.started),
+    orientCond,
+    Math.round(t - orientCondStart),
     Math.round((e.beta  || 0) * 10) / 10,
     Math.round((e.gamma || 0) * 10) / 10
   ]);
@@ -498,7 +485,12 @@ async function enableOrientation(){
 }
 
 function beginBlock(cond, block){
-  if(block === 'main') SES.trials = SES.trials.filter(t => !(t.condition === cond && t.block === 'main'));
+  if(block === 'main'){
+    SES.trials = SES.trials.filter(t => t.condition !== cond);
+    orientCondStart = performance.now();
+    orientCond = cond;
+    orientLast = 0;
+  }
   run = { cond, block, list: makeList(block), i: 0, trial: null, phase: 'wait', padId: null, cursor: null, last: null };
   show('task');
   layout();
@@ -541,7 +533,7 @@ function layout(){
       Object.assign(clickEl.style, { display: 'flex', left: G.click.x+'px', top: G.click.y+'px', width: cs+'px', height: cs+'px' });
     } else { clickEl.style.display = 'none'; G.click = null; }
   }
-  if(run.trial && run.phase === 'trial'){ G.cells[run.trial.r][run.trial.c].el.classList.add('target'); run.trial.resized = 1; }
+  if(run.trial && run.phase === 'trial'){ G.cells[run.trial.r][run.trial.c].el.classList.add('target'); }
   drawCursor();
 }
 
@@ -555,9 +547,7 @@ function presentTrial(){
   } else if(m === 'absolute'){
     run.cursor = run.padId != null ? run.cursor : null;
   }
-  run.trial = { r, c, t0: now(), startIso: new Date().toISOString(), first: null, errors: 0, misses: [],
-                padTouches: 0, path: 0, stray: 0, emptyClicks: 0, resized: 0,
-                cs: run.cursor ? { x: run.cursor.x, y: run.cursor.y } : null };
+  run.trial = { r, c, t0: now(), errors: 0, misses: [] };
   G.cells[r][c].el.classList.add('target');
   progEl.textContent = `${run.block === 'practice' ? '연습 ' : ''}${run.i + 1} / ${run.list.length}`;
   drawCursor();
@@ -582,7 +572,6 @@ function cellAt(x, y){
 function ptOf(e){ const b = stage.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; }
 function moveCursorTo(x, y){
   x = clamp(x, 0, G.W - 1); y = clamp(y, 0, G.H - 1);
-  if(run.cursor && run.trial) run.trial.path += Math.hypot(x - run.cursor.x, y - run.cursor.y);
   run.cursor = { x, y }; drawCursor();
 }
 function absMap(p){
@@ -619,15 +608,14 @@ stage.addEventListener('pointerdown', e => {
       if(COND[run.cond].map === 'absolute') moveCursorTo(absMap(p).x, absMap(p).y); }
     return;
   }
-  const t = run.trial, m = COND[run.cond].map;
-  if(t.first == null) t.first = now();
+  const m = COND[run.cond].map;
 
   if(m === 'direct'){
-    if(inR(p, G.grid)) select(p.x, p.y, 'tap'); else t.stray++;
+    if(inR(p, G.grid)) select(p.x, p.y, 'tap');
     return;
   }
   if(inR(p, G.pad) && run.padId == null){
-    run.padId = e.pointerId; t.padTouches++;
+    run.padId = e.pointerId;
     try { stage.setPointerCapture(e.pointerId); } catch(_){}
     if(m === 'absolute'){ const a = absMap(p); moveCursorTo(a.x, a.y); }
     run.last = p;
@@ -635,10 +623,9 @@ stage.addEventListener('pointerdown', e => {
   }
   if(G.click && inR(p, G.click)){
     clickEl.classList.add('down'); setTimeout(() => clickEl.classList.remove('down'), 120);
-    if(run.cursor) select(run.cursor.x, run.cursor.y, 'click'); else t.emptyClicks++;
+    if(run.cursor) select(run.cursor.x, run.cursor.y, 'click');
     return;
   }
-  t.stray++;
 }, { passive: false });
 
 stage.addEventListener('pointermove', e => {
@@ -655,7 +642,6 @@ stage.addEventListener('pointermove', e => {
     }
     run.last = p;
   }
-  if(run.trial && run.trial.first == null && run.phase === 'trial') run.trial.first = now();
 }, { passive: false });
 
 function pointerEnd(e){
@@ -688,28 +674,17 @@ function select(x, y, how){
 }
 
 function complete(x, y, how){
-  const t = run.trial, tEnd = now(), k = G.cells[t.r][t.c], c = COND[run.cond];
+  const t = run.trial, tEnd = now(), k = G.cells[t.r][t.c];
   run.phase = 'iti';
-  SES.trials.push({
-    participant: SES.participant, session_id: SES.id, dominant_hand: SES.hand,
-    condition: run.cond, mapping: c.map, pad_hand: c.hand || '', condition_position: SES.condIdx + 1,
-    block: run.block, trial: run.i + 1,
-    target_row: t.r + 1, target_col: t.c + 1,
-    target_cx: R(k.x + k.w/2), target_cy: R(k.y + k.h/2), target_w: R(k.w), target_h: R(k.h),
-    cursor_start_x: t.cs ? R(t.cs.x) : '', cursor_start_y: t.cs ? R(t.cs.y) : '',
-    start_time: t.startIso,
-    movement_time_ms: R(tEnd - t.t0),
-    reaction_time_ms: t.first != null ? R(t.first - t.t0) : '',
-    errors: t.errors, first_attempt_hit: t.errors === 0 ? 1 : 0,
-    select_x: R(x), select_y: R(y), select_method: how,
-    pad_touches: t.padTouches, cursor_path_px: R(t.path), stray_touches: t.stray,
-    empty_clicks: t.emptyClicks, miss_points: t.misses.join(' '), resized: t.resized,
-    screen_w: G.W, screen_h: G.H,
-    pad_w: G.pad ? R(G.pad.w) : '', pad_h: G.pad ? R(G.pad.h) : '',
-    gain: c.map === 'relative' ? num('gain') : '',
-    select_mode: c.map === 'direct' ? 'tap' : CFG.selectMode
-  });
-  saveSes();
+  if(run.block === 'main'){
+    SES.trials.push({
+      participant: SES.participant, session_id: SES.id, dominant_hand: SES.hand,
+      condition: run.cond,
+      target_row: t.r + 1, target_col: t.c + 1,
+      movement_time_ms: R(tEnd - t.t0)
+    });
+    saveSes();
+  }
   k.el.classList.remove('target'); k.el.classList.add('hit');
   run.i++;
   clearTimeout(timer);
@@ -726,44 +701,16 @@ function endBlock(){
   const st = $('#introUp');
   setUpStatus(st, 'busy');
   upload(SES).then(ok => setUpStatus(st, ok ? 'ok' : 'fail'));
-  if(SES.condIdx < SES.order.length) showIntro(); else showSurvey();
+  if(SES.condIdx < SES.order.length) showIntro(); else finishSession();
 }
 
-/* ---------- 설문 ---------- */
-let ranking = {};
-function showSurvey(){
-  ranking = {};
-  const list = $('#rankList'); list.innerHTML = '';
-  $('#scaleMax').textContent = `${SES.order.length} = 가장 불편함`;
-  SES.order.forEach((key, i) => {
-    const b = document.createElement('button');
-    b.innerHTML = `<div class="n"></div><div class="t"><b>${COND[key].name}</b><span>${i + 1}번째로 해 본 방식, ${COND[key].ko}</span></div>`;
-    b.onclick = () => {
-      if(ranking[key]){                       // 지우면 뒤 순위를 당김
-        const gone = ranking[key]; delete ranking[key];
-        Object.keys(ranking).forEach(k => { if(ranking[k] > gone) ranking[k]--; });
-      } else ranking[key] = Object.keys(ranking).length + 1;
-      paint();
-    };
-    b.dataset.k = key; list.appendChild(b);
-  });
-  const paint = () => {
-    list.querySelectorAll('button').forEach(b => {
-      const v = ranking[b.dataset.k]; b.classList.toggle('set', !!v); b.querySelector('.n').textContent = v || '';
-    });
-    $('#surveyGo').disabled = Object.keys(ranking).length !== SES.order.length;
-  };
-  paint();
-  show('survey');
-}
-$('#surveyGo').onclick = () => {
-  SES.survey = { ranking: { ...ranking }, comment: $('#comment').value.trim(), time: new Date().toISOString() };
+function finishSession(){
+  orientCondStart = null;
   SES.done = true; SES.finished = new Date().toISOString();
   saveSes(); store('qc_current', null);
-  $('#comment').value = '';
   show('done');
   finalUpload();
-};
+}
 function finalUpload(){
   const st = $('#doneUp'); setUpStatus(st, 'busy');
   upload(SES).then(ok => setUpStatus(st, ok ? 'ok' : 'fail'));
@@ -777,20 +724,10 @@ $('#doneNext').onclick = () => {
 };
 
 /* ---------- CSV / 업로드 ---------- */
-const COLS = ['participant','session_id','dominant_hand','condition','mapping','pad_hand','condition_position','block','trial',
-  'target_row','target_col','target_cx','target_cy','target_w','target_h','cursor_start_x','cursor_start_y','start_time',
-  'movement_time_ms','reaction_time_ms','errors','first_attempt_hit','select_x','select_y','select_method','pad_touches',
-  'cursor_path_px','stray_touches','empty_clicks','miss_points','resized','screen_w','screen_h','pad_w','pad_h',
-  'gain','select_mode'];
+const COLS = ['participant','session_id','dominant_hand','condition','target_row','target_col','movement_time_ms'];
 const esc = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
 const BOM = '\uFEFF';
 function trialsCsv(s){ return BOM + [COLS.join(',')].concat(s.trials.map(t => COLS.map(c => esc(t[c])).join(','))).join('\n'); }
-function surveyCsv(s){
-  const n = s.order.length;
-  const rows = s.order.map((k, i) => [s.participant, s.id, s.hand, k, COND[k].name, i + 1, s.survey.ranking[k], n + 1 - s.survey.ranking[k], s.survey.comment]);
-  return BOM + ['participant,session_id,dominant_hand,condition,condition_name,condition_position,rank,comfort_score,comment']
-    .concat(rows.map(r => r.map(esc).join(','))).join('\n');
-}
 function filesFor(s){
   const base = `QuickCursor_${s.id}`;
   const { trials, orientation, ...meta } = s;
@@ -798,10 +735,9 @@ function filesFor(s){
     { name: `${base}_trials.csv`, content: trialsCsv(s), mimeType: 'text/csv' },
     { name: `${base}_meta.json`, content: JSON.stringify(meta, null, 2), mimeType: 'application/json' },
   ];
-  if(s.survey) files.push({ name: `${base}_survey.csv`, content: surveyCsv(s), mimeType: 'text/csv' });
   if(s.orientation && s.orientation.length){
-    const oriCsv = BOM + 't_ms,beta,gamma\n' +
-      s.orientation.map(([t,b,g]) => `${t},${b},${g}`).join('\n');
+    const oriCsv = BOM + 'condition,t_ms,beta,gamma\n' +
+      s.orientation.map(([c,t,b,g]) => `${c},${t},${b},${g}`).join('\n');
     files.push({ name: `${base}_orientation.csv`, content: oriCsv, mimeType: 'text/csv' });
   }
   return files;
@@ -821,13 +757,13 @@ async function upload(s){
   if(!CFG.scriptUrl){ s.uploadError = 'Drive 주소 미설정'; saveSes(s); return false; }
   try {
     await post({ token: CFG.token, files: filesFor(s) });
-    s.lastUpload = { time: new Date().toISOString(), trials: s.trials.length, survey: !!s.survey };
+    s.lastUpload = { time: new Date().toISOString(), trials: s.trials.length };
     s.uploadError = null; saveSes(s); return true;
   } catch(err){
     s.uploadError = String(err.message || err); saveSes(s); return false;
   }
 }
-const needsUpload = s => !s.lastUpload || s.lastUpload.trials !== s.trials.length || (!!s.survey !== s.lastUpload.survey);
+const needsUpload = s => !s.lastUpload || s.lastUpload.trials !== s.trials.length;
 function setUpStatus(el, state){
   el.className = 'status' + (state === 'ok' ? ' ok' : state === 'fail' ? ' bad' : '');
   el.textContent = state === 'busy' ? 'Google Drive에 저장하는 중…'
@@ -856,7 +792,7 @@ function renderSessions(){
     const s = load('qc_ses_' + id); if(!s) return;
     const need = needsUpload(s); if(need) pending++;
     const row = document.createElement('div'); row.className = 'sess';
-    const main = s.trials.filter(t => t.block === 'main').length;
+    const main = s.trials.length;
     row.innerHTML = `<div class="who"><b>${s.participant}</b> <span class="hint">${s.started.slice(0,16).replace('T',' ')}, 본 시행 ${main}회${s.done ? '' : ', 진행 중 멈춤'}</span></div>
       <span class="tag ${need ? 'warn' : 'good'}">${need ? '업로드 필요' : 'Drive 저장됨'}</span>`;
     const up = document.createElement('button'); up.className = 'btn small ghost'; up.textContent = '올리기';
