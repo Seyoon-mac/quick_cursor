@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="QuickCursor">
+<meta name="color-scheme" content="light">
+<title>QuickCursor 실험</title>
+<style>
+:root{
+  --bg:#FFFFFF; --ink:#1D2125; --muted:#68707A; --line:#D9DDE2; --panel:#F4F5F7;
+  --cell:#E6E8EB; --target:#E5383B; --hit:#2BA84A;
+  --pad:#3A78C9; --padfill:rgba(58,120,201,.16); --accent:#3A78C9;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  -webkit-text-size-adjust:100%;font-size:17px;line-height:1.5}
+body{position:fixed;inset:0;overflow:hidden;-webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+input,textarea{-webkit-user-select:text;user-select:text;font:inherit;color:inherit}
+.screen{position:absolute;inset:0;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:max(36px,env(safe-area-inset-top)) max(32px,env(safe-area-inset-right)) max(36px,env(safe-area-inset-bottom)) max(32px,env(safe-area-inset-left))}
+.screen.on{display:block}
+.wrap{max-width:680px;margin:0 auto}
+h1{font-size:34px;line-height:1.15;font-weight:700;letter-spacing:-.02em}
+h2{font-size:20px;font-weight:650;margin:34px 0 12px}
+p.sub{color:var(--muted);margin-top:6px}
+label.f{display:block;margin:14px 0 6px;font-weight:600;font-size:15px}
+.hint{color:var(--muted);font-size:14px;margin-top:4px}
+input[type=text],input[type=number],input[type=url],textarea{width:100%;padding:12px 14px;border:1px solid var(--line);
+  border-radius:10px;background:#fff;font-size:17px}
+input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row > div{flex:1 1 180px}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{flex:1;border:0;background:#fff;padding:12px 8px;font:inherit;font-size:16px;color:var(--ink)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.sel{background:var(--ink);color:#fff}
+.btn{display:inline-block;border:0;border-radius:12px;padding:14px 22px;font:inherit;font-weight:600;
+  background:var(--ink);color:#fff;font-size:17px}
+.btn.big{width:100%;padding:18px;font-size:19px;margin-top:28px}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:9px 14px;font-size:15px;border-radius:9px}
+.btn:disabled{opacity:.35}
+.btn:focus-visible,.seg button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.err{color:var(--target);font-size:15px;margin-top:8px;min-height:1em}
+.ok{color:var(--hit)}
+details{border-top:1px solid var(--line);margin-top:30px;padding-top:6px}
+summary{font-size:20px;font-weight:650;padding:12px 0;list-style-position:inside}
+.status{font-size:15px;margin-top:10px;color:var(--muted)}
+.status.ok{color:var(--hit)} .status.bad{color:var(--target)}
+.sess{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
+.sess .who{flex:1}
+.sess .who b{font-weight:600}
+.tag{font-size:13px;padding:2px 8px;border-radius:6px;background:var(--panel);color:var(--muted)}
+.tag.warn{background:#FDECEC;color:#B4232A}
+.tag.good{background:#E7F6EB;color:#1E7A37}
+
+/* condition intro */
+.step{color:var(--muted);font-size:16px;font-weight:600}
+.cname{font-size:40px;font-weight:700;letter-spacing:-.02em;line-height:1.1;margin-top:6px}
+.cko{font-size:20px;color:var(--muted);margin-top:4px}
+.howto{font-size:19px;margin-top:22px;max-width:560px}
+.mini{position:relative;width:300px;height:210px;border:6px solid var(--ink);border-radius:18px;margin-top:28px;background:#fff}
+.mini .g{position:absolute;inset:14px 12px 12px;display:grid;grid-template-columns:repeat(9,1fr);gap:3px}
+.mini .g i{background:var(--cell);border-radius:2px}
+.mini .p{position:absolute;bottom:8px;width:84px;height:58px;border:2px solid var(--pad);background:rgba(58,120,201,.25);border-radius:6px}
+.mini .c{position:absolute;bottom:8px;width:34px;height:34px;border-radius:50%;background:var(--ink);opacity:.85}
+
+/* task */
+#task{padding:0;overflow:hidden;touch-action:none;background:var(--bg)}
+#stage{position:absolute;inset:0;touch-action:none}
+.cell{position:absolute;background:var(--cell);border-radius:10px}
+.cell.target{background:var(--target)}
+.cell.hit{background:var(--hit)}
+.cell.miss{box-shadow:inset 0 0 0 3px var(--target)}
+#pad{position:absolute;border:2.5px solid var(--pad);background:var(--padfill);border-radius:14px;display:none;z-index:3}
+#clicker{position:absolute;border-radius:50%;background:rgba(29,33,37,.55);color:#fff;display:none;z-index:3;
+  align-items:center;justify-content:center;font-weight:600;font-size:17px}
+#clicker.down{background:rgba(58,120,201,.95)}
+#cursor{position:absolute;left:0;top:0;width:26px;height:34px;z-index:5;pointer-events:none;display:none;will-change:transform}
+#progress{position:absolute;top:12px;right:24px;font-size:14px;color:#9AA1A9;z-index:2;pointer-events:none;font-variant-numeric:tabular-nums}
+#hold{position:absolute;top:8px;left:12px;width:30px;height:30px;border-radius:50%;border:1.5px solid #C5CAD0;z-index:6}
+#hold.charging{background:#C5CAD0}
+#pause{position:absolute;inset:0;background:rgba(255,255,255,.96);z-index:10;display:none;align-items:center;justify-content:center}
+#pause .box{width:min(440px,90%);display:flex;flex-direction:column;gap:12px}
+#pause h2{margin:0 0 8px}
+
+/* survey */
+.rank{display:flex;flex-direction:column;gap:12px;margin-top:22px}
+.rank button{display:flex;align-items:center;gap:16px;text-align:left;border:1px solid var(--line);background:#fff;
+  border-radius:12px;padding:16px 18px;font:inherit;color:var(--ink)}
+.rank button .n{width:40px;height:40px;border-radius:50%;border:1.5px dashed var(--line);display:flex;align-items:center;
+  justify-content:center;font-weight:700;font-size:19px;flex:none;color:var(--muted)}
+.rank button.set .n{border:0;background:var(--ink);color:#fff}
+.rank button .t b{display:block;font-weight:600}
+.rank button .t span{color:var(--muted);font-size:15px}
+.scale{display:flex;justify-content:space-between;color:var(--muted);font-size:14px;margin-top:8px}
+@media (prefers-reduced-motion:no-preference){ .cell{transition:background-color .08s} }
+</style>
+</head>
+<body>
+
+<!-- ============ 1. 설정 ============ -->
+<section class="screen on" id="setup">
+ <div class="wrap">
+  <h1>QuickCursor 실험</h1>
+  <p class="sub">CSE333 Team 8. 참가자 정보를 입력하고 실험을 시작하세요.</p>
+
+  <div id="resumeBox" style="display:none;margin-top:22px;padding:16px;border-radius:12px;background:var(--panel)">
+   <div id="resumeText" style="font-size:16px"></div>
+   <div class="row" style="margin-top:10px;gap:8px">
+    <button class="btn small" id="resumeBtn">이어서 진행</button>
+    <button class="btn small ghost" id="resumeDrop">처음부터 새로</button>
+   </div>
+  </div>
+
+  <h2>참가자</h2>
+  <label class="f" for="pid">참가자 번호</label>
+  <input type="text" id="pid" placeholder="예: P01" autocomplete="off" autocapitalize="characters">
+  <p class="hint">숫자가 들어 있으면 그 번호로 조건 순서(균형 라틴방격)가 정해집니다.</p>
+
+  <label class="f">터치스크린을 주로 어느 손으로 쓰나요?</label>
+  <div class="seg" id="handSeg">
+   <button data-v="R">오른손</button><button data-v="L">왼손</button><button data-v="B">양손</button>
+  </div>
+
+  <label class="f" for="note">메모 (선택)</label>
+  <input type="text" id="note" placeholder="실험자 이름, 특이사항 등">
+
+  <div class="err" id="setupErr"></div>
+  <button class="btn big" id="startBtn">실험 시작</button>
+
+  <details id="cfgBox">
+   <summary>Google Drive 연결</summary>
+   <label class="f" for="cfg_scriptUrl">Apps Script 웹 앱 주소</label>
+   <input type="url" id="cfg_scriptUrl" data-cfg="scriptUrl" placeholder="https://script.google.com/macros/s/…/exec">
+   <label class="f" for="cfg_token">토큰</label>
+   <input type="text" id="cfg_token" data-cfg="token" placeholder="Code.gs의 TOKEN 값">
+   <div style="margin-top:12px"><button class="btn small" id="pingBtn">연결 확인</button></div>
+   <div class="status" id="pingStatus"></div>
+  </details>
+
+  <details>
+   <summary>실험 설정</summary>
+   <div class="row">
+    <div><label class="f" for="cfg_cols">격자 열</label><input type="number" id="cfg_cols" data-cfg="cols" min="2" max="20"></div>
+    <div><label class="f" for="cfg_rows">격자 행</label><input type="number" id="cfg_rows" data-cfg="rows" min="2" max="20"></div>
+   </div>
+   <div class="row">
+    <div><label class="f" for="cfg_reps">칸당 반복 횟수</label><input type="number" id="cfg_reps" data-cfg="reps" min="1" max="10">
+     <p class="hint" id="trialCount"></p></div>
+    <div><label class="f" for="cfg_practice">조건별 연습 시행</label><input type="number" id="cfg_practice" data-cfg="practice" min="0" max="30"></div>
+   </div>
+   <div class="row">
+    <div><label class="f" for="cfg_padWidth">패드 가로 크기 (pt)</label><input type="number" id="cfg_padWidth" data-cfg="padWidth" min="120" max="600">
+     <p class="hint">세로는 화면 비율에 맞춰 자동으로 정해집니다.</p></div>
+    <div><label class="f" for="cfg_gain">상대 매핑 배율</label><input type="number" id="cfg_gain" data-cfg="gain" min="0.5" max="10" step="0.1">
+     <p class="hint">패드에서 1pt 움직이면 커서가 몇 pt 움직이는지</p></div>
+   </div>
+   <div class="row">
+    <div><label class="f" for="cfg_clickerSize">클릭 버튼 지름 (pt)</label><input type="number" id="cfg_clickerSize" data-cfg="clickerSize" min="60" max="240"></div>
+    <div><label class="f" for="cfg_iti">시행 간 간격 (ms)</label><input type="number" id="cfg_iti" data-cfg="iti" min="0" max="3000" step="50"></div>
+   </div>
+   <label class="f">선택 방식 (패드 조건)</label>
+   <div class="seg" id="selSeg"><button data-v="clicker">반대 손 클릭 버튼</button><button data-v="release">손가락 떼면 선택</button></div>
+   <label class="f">조건 순서</label>
+   <div class="seg" id="orderSeg"><button data-v="latin">균형 라틴방격</button><button data-v="random">무작위</button></div>
+   <label class="f">상대 매핑 커서 시작 위치</label>
+   <div class="seg" id="resetSeg"><button data-v="1">매 시행 화면 중앙</button><button data-v="0">이전 위치 유지</button></div>
+   <p class="hint" style="margin-top:14px">설정은 이 기기에 저장됩니다. 홈 화면 앱과 Safari는 저장 공간이 따로라서, 실험에 쓸 쪽에서 입력하세요.</p>
+  </details>
+
+  <details id="dataBox">
+   <summary>이 기기에 보관된 데이터</summary>
+   <div id="sessList"></div>
+  </details>
+ </div>
+</section>
+
+<!-- ============ 2. 조건 안내 ============ -->
+<section class="screen" id="intro">
+ <div class="wrap">
+  <div class="step" id="introStep"></div>
+  <div class="cname" id="introName"></div>
+  <div class="cko" id="introKo"></div>
+  <div class="mini" id="introMini"><div class="g"></div></div>
+  <p class="howto" id="introHow"></p>
+  <button class="btn big" id="introGo"></button>
+  <div class="status" id="introUp"></div>
+ </div>
+</section>
+
+<!-- ============ 3. 연습 후 ============ -->
+<section class="screen" id="mid">
+ <div class="wrap">
+  <div class="step" id="midStep"></div>
+  <div class="cname">연습이 끝났습니다</div>
+  <p class="howto">이제 본 실험입니다. 처음 자세(양손으로 기기 양옆을 잡은 자세)로 돌아간 뒤 시작하세요. 가능한 한 빠르고 정확하게 눌러 주세요.</p>
+  <div class="row" style="gap:10px;margin-top:28px">
+   <button class="btn ghost" id="midAgain">연습 한 번 더</button>
+   <button class="btn" id="midGo" style="flex:1">본 실험 시작</button>
+  </div>
+ </div>
+</section>
+
+<!-- ============ 4. 과제 ============ -->
+<section class="screen" id="task">
+ <div id="stage">
+  <div id="pad"></div>
+  <div id="clicker">클릭</div>
+  <svg id="cursor" viewBox="0 0 26 34" aria-hidden="true"><path d="M2 2 L2 27 L8.5 21 L13 31.5 L17.5 29.5 L13 19.5 L22 19.5 Z" fill="#111" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+  <div id="progress"></div>
+  <div id="hold" title="길게 누르면 일시정지"></div>
+ </div>
+ <div id="pause">
+  <div class="box">
+   <h2>일시정지</h2>
+   <button class="btn" id="pResume">계속하기 (현재 시행 다시)</button>
+   <button class="btn ghost" id="pRestart">이 블록 처음부터</button>
+   <button class="btn ghost" id="pQuit">저장하고 처음 화면으로</button>
+  </div>
+ </div>
+</section>
+
+<!-- ============ 5. 설문 ============ -->
+<section class="screen" id="survey">
+ <div class="wrap">
+  <div class="step">마지막 설문</div>
+  <div class="cname" style="font-size:32px">가장 편했던 방식부터 차례로 눌러 주세요</div>
+  <p class="sub">처음 누른 것이 1위(가장 편함)가 됩니다. 다시 누르면 순위가 지워집니다.</p>
+  <div class="rank" id="rankList"></div>
+  <div class="scale"><span>1 = 가장 편함</span><span id="scaleMax"></span></div>
+  <label class="f" for="comment" style="margin-top:24px">하고 싶은 말 (선택)</label>
+  <textarea id="comment" rows="3"></textarea>
+  <button class="btn big" id="surveyGo" disabled>저장하고 마치기</button>
+ </div>
+</section>
+
+<!-- ============ 6. 종료 ============ -->
+<section class="screen" id="done">
+ <div class="wrap">
+  <div class="cname">실험이 끝났습니다</div>
+  <p class="howto">참여해 주셔서 감사합니다.</p>
+  <div class="status" id="doneUp" style="font-size:17px;margin-top:26px"></div>
+  <div class="row" style="gap:10px;margin-top:16px">
+   <button class="btn ghost small" id="doneRetry">다시 올리기</button>
+   <button class="btn ghost small" id="doneDl">CSV 내려받기</button>
+  </div>
+  <button class="btn big" id="doneNext">다음 참가자</button>
+ </div>
+</section>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const now = () => performance.now();
+const R = Math.round;
+
+/* ---------- 조건 정의 ---------- */
+const COND = {
+  DT:    { name:'Direct Touch',          ko:'직접 터치',           map:'direct',   hand:null },
+  REL_L: { name:'Relative – Left Hand',  ko:'상대 매핑, 왼손 패드', map:'relative', hand:'L' },
+  REL_R: { name:'Relative – Right Hand', ko:'상대 매핑, 오른손 패드', map:'relative', hand:'R' },
+  ABS_L: { name:'Absolute – Left Hand',  ko:'절대 매핑, 왼손 패드', map:'absolute', hand:'L' },
+  ABS_R: { name:'Absolute – Right Hand', ko:'절대 매핑, 오른손 패드', map:'absolute', hand:'R' },
+};
+const KEYS = Object.keys(COND);
+
+/* ---------- 저장소 ---------- */
+const load  = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
+const store = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } };
+
+const DEF = { scriptUrl:'', token:'', cols:9, rows:6, reps:1, practice:5, padWidth:300, gain:3,
+              clickerSize:110, iti:400, selectMode:'clicker', orderMode:'latin', resetCursor:'1' };
+const CFG = Object.assign({}, DEF, load('qc_cfg') || {});
+const saveCfg = () => store('qc_cfg', CFG);
+const num = k => Number(CFG[k]);
+
+let SES = null;   // 현재 세션
+let run = null;   // 현재 블록 실행 상태
+const G = { W:0, H:0, cells:[], pad:null, click:null, grid:null };
+
+function saveSes(s = SES){
+  if(!s) return;
+  store('qc_ses_' + s.id, s);
+  const idx = load('qc_index') || [];
+  if(!idx.includes(s.id)){ idx.push(s.id); store('qc_index', idx); }
+}
+
+/* ---------- 화면 전환 ---------- */
+function show(id){
+  document.querySelectorAll('.screen').forEach(el => el.classList.toggle('on', el.id === id));
+}
+
+/* ---------- 설정 화면 ---------- */
+document.querySelectorAll('[data-cfg]').forEach(inp => {
+  inp.value = CFG[inp.dataset.cfg];
+  inp.addEventListener('input', () => {
+    const k = inp.dataset.cfg;
+    CFG[k] = inp.type === 'number' ? (inp.value === '' ? DEF[k] : Number(inp.value)) : inp.value.trim();
+    saveCfg(); updateCount();
+  });
+});
+function bindSeg(segId, key){
+  const seg = $(segId);
+  const paint = () => seg.querySelectorAll('button').forEach(b => b.classList.toggle('sel', b.dataset.v === String(CFG[key])));
+  seg.addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; CFG[key] = b.dataset.v; saveCfg(); paint(); });
+  paint();
+}
+bindSeg('#selSeg','selectMode'); bindSeg('#orderSeg','orderMode'); bindSeg('#resetSeg','resetCursor');
+
+let chosenHand = null;
+$('#handSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  chosenHand = b.dataset.v;
+  $('#handSeg').querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
+});
+
+function updateCount(){
+  const n = num('cols') * num('rows') * num('reps');
+  $('#trialCount').textContent = `조건당 본 시행 ${n}회, 전체 ${n * KEYS.length}회`;
+}
+updateCount();
+if(!CFG.scriptUrl) $('#cfgBox').open = true;
+
+/* ---------- 조건 순서 ---------- */
+function williams(n){
+  const first = [0]; let lo = 1, hi = n - 1, up = true;
+  while(first.length < n){ first.push(up ? lo++ : hi--); up = !up; }
+  const rows = [];
+  for(let i = 0; i < n; i++) rows.push(first.map(v => (v + i) % n));
+  if(n % 2) for(let i = 0; i < n; i++) rows.push(rows[i].slice().reverse());
+  return rows;
+}
+function shuffle(a){ for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function orderFor(pid){
+  const m = pid.match(/\d+/);
+  if(CFG.orderMode === 'latin' && m){
+    const rows = williams(KEYS.length);
+    const k = ((parseInt(m[0], 10) - 1) % rows.length + rows.length) % rows.length;
+    return { order: rows[k].map(i => KEYS[i]), method: 'latin#' + (k + 1) };
+  }
+  return { order: shuffle(KEYS.slice()), method: 'random' };
+}
+
+function stamp(d){
+  const p = x => String(x).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+function goFullscreen(){
+  const el = document.documentElement;
+  try { (el.requestFullscreen || el.webkitRequestFullscreen || (()=>{})).call(el); } catch(e){}
+}
+
+$('#startBtn').addEventListener('click', () => {
+  const pid = $('#pid').value.trim().replace(/[^\w\-]/g, '');
+  const err = $('#setupErr');
+  if(!pid){ err.textContent = '참가자 번호를 입력하세요.'; return; }
+  if(!chosenHand){ err.textContent = '주로 쓰는 손을 골라 주세요.'; return; }
+  err.textContent = '';
+  const d = new Date(), o = orderFor(pid);
+  const { scriptUrl, token, ...cfgCopy } = CFG;
+  SES = {
+    id: `${pid}_${stamp(d)}`, participant: pid, hand: chosenHand, note: $('#note').value.trim(),
+    started: d.toISOString(), order: o.order, orderMethod: o.method, condIdx: 0,
+    trials: [], survey: null, done: false, lastUpload: null, cfg: cfgCopy,
+    device: { ua: navigator.userAgent, screenW: screen.width, screenH: screen.height, dpr: devicePixelRatio,
+              standalone: !!navigator.standalone }
+  };
+  saveSes(); store('qc_current', SES.id);
+  goFullscreen();
+  showIntro();
+});
+
+/* ---------- 이어하기 ---------- */
+function checkResume(){
+  const id = load('qc_current'); const s = id && load('qc_ses_' + id);
+  const box = $('#resumeBox');
+  if(s && !s.done){
+    box.style.display = 'block';
+    const where = s.condIdx < s.order.length ? `조건 ${s.condIdx + 1}/${s.order.length}부터` : '설문부터';
+    $('#resumeText').innerHTML = `<b>${s.participant}</b>의 실험이 중간에 멈춰 있습니다. ${where} 다시 시작할 수 있어요.`;
+    $('#resumeBtn').onclick = () => {
+      SES = s;
+      if(SES.condIdx < SES.order.length){
+        const c = SES.order[SES.condIdx];
+        SES.trials = SES.trials.filter(t => t.condition !== c);  // 끊긴 조건은 처음부터
+        saveSes(); goFullscreen(); showIntro();
+      } else showSurvey();
+    };
+    $('#resumeDrop').onclick = () => { store('qc_current', null); box.style.display = 'none'; };
+  } else box.style.display = 'none';
+}
+
+/* ---------- 조건 안내 ---------- */
+function howText(key){
+  const c = COND[key];
+  if(c.map === 'direct') return '양손으로 기기 양옆을 잡은 자세에서 시작하세요. 빨간 칸을 손가락으로 직접 누르면 됩니다. 손이 닿지 않으면 자세를 바꿔도 괜찮아요.';
+  const side = c.hand === 'L' ? '왼손' : '오른손', other = c.hand === 'L' ? '오른손' : '왼손';
+  const pos = c.hand === 'L' ? '왼쪽 아래' : '오른쪽 아래';
+  const move = c.map === 'absolute'
+    ? `${pos} 파란 패드는 화면 전체를 줄여 놓은 것입니다. 패드에서 짚은 위치가 화면의 같은 위치에 커서로 나타납니다.`
+    : `${pos} 파란 패드를 트랙패드처럼 문지르면, 움직인 만큼 커서가 따라 움직입니다. 손가락을 뗐다가 다시 대고 이어서 움직일 수 있어요.`;
+  const sel = CFG.selectMode === 'clicker'
+    ? `커서 끝을 빨간 칸에 올린 뒤 ${other}으로 클릭 버튼을 누르세요.`
+    : '커서 끝을 빨간 칸에 올린 채 손가락을 떼면 선택됩니다.';
+  return `${side} 엄지로 조작합니다. ${move} ${sel}`;
+}
+function drawMini(key){
+  const box = $('#introMini');
+  box.querySelectorAll('.p,.c').forEach(e => e.remove());
+  const g = box.querySelector('.g');
+  if(!g.children.length) for(let i = 0; i < 54; i++) g.appendChild(document.createElement('i'));
+  const c = COND[key]; if(c.map === 'direct') return;
+  const p = document.createElement('div'); p.className = 'p';
+  p.style[c.hand === 'L' ? 'left' : 'right'] = '8px'; box.appendChild(p);
+  if(CFG.selectMode === 'clicker'){
+    const k = document.createElement('div'); k.className = 'c';
+    k.style[c.hand === 'L' ? 'right' : 'left'] = '8px'; box.appendChild(k);
+  }
+}
+function showIntro(){
+  const key = SES.order[SES.condIdx];
+  $('#introStep').textContent = `조건 ${SES.condIdx + 1} / ${SES.order.length}`;
+  $('#introName').textContent = COND[key].name;
+  $('#introKo').textContent = COND[key].ko;
+  $('#introHow').textContent = howText(key);
+  drawMini(key);
+  const hasPractice = num('practice') > 0;
+  $('#introGo').textContent = hasPractice ? `연습 시작 (${num('practice')}회)` : '시작';
+  $('#introGo').onclick = () => beginBlock(key, hasPractice ? 'practice' : 'main');
+  show('intro');
+}
+$('#midGo').onclick = () => beginBlock(run.cond, 'main');
+$('#midAgain').onclick = () => beginBlock(run.cond, 'practice');
+
+/* ---------- 시행 목록 ---------- */
+function makeList(block){
+  const cols = num('cols'), rows = num('rows');
+  const all = []; for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++) all.push([r, c]);
+  let list;
+  if(block === 'practice'){ list = shuffle(all.slice()).slice(0, num('practice')); }
+  else {
+    list = []; for(let k = 0; k < num('reps'); k++) list.push(...all);
+    for(let tries = 0; tries < 50; tries++){       // 같은 칸이 연달아 나오지 않게
+      shuffle(list);
+      if(list.every((v, i) => i === 0 || v[0] !== list[i-1][0] || v[1] !== list[i-1][1])) break;
+    }
+  }
+  return list;
+}
+
+/* ---------- 과제 화면 ---------- */
+const stage = $('#stage'), padEl = $('#pad'), clickEl = $('#clicker'), curEl = $('#cursor'), progEl = $('#progress');
+let timer = null;
+
+function beginBlock(cond, block){
+  if(block === 'main') SES.trials = SES.trials.filter(t => !(t.condition === cond && t.block === 'main'));
+  run = { cond, block, list: makeList(block), i: 0, trial: null, phase: 'wait', padId: null, cursor: null, last: null };
+  show('task');
+  layout();
+  clearTimeout(timer);
+  timer = setTimeout(presentTrial, 700);
+}
+
+function layout(){
+  const W = stage.clientWidth, H = stage.clientHeight;
+  G.W = W; G.H = H;
+  const cols = num('cols'), rows = num('rows');
+  const top = 46, side = 24, bottom = 24;
+  const gap = Math.max(8, R(Math.min(W, H) * 0.014));
+  const cw = (W - 2*side - (cols-1)*gap) / cols, ch = (H - top - bottom - (rows-1)*gap) / rows;
+  stage.querySelectorAll('.cell').forEach(e => e.remove());
+  G.cells = [];
+  for(let r = 0; r < rows; r++){
+    G.cells.push([]);
+    for(let c = 0; c < cols; c++){
+      const el = document.createElement('div'); el.className = 'cell';
+      const x = side + c*(cw + gap), y = top + r*(ch + gap);
+      Object.assign(el.style, { left: x+'px', top: y+'px', width: cw+'px', height: ch+'px' });
+      stage.insertBefore(el, padEl);
+      G.cells[r].push({ x, y, w: cw, h: ch, el });
+    }
+  }
+  G.grid = { x: side, y: top, w: W - 2*side, h: H - top - bottom };
+
+  const c = COND[run.cond], em = 28;
+  if(c.map === 'direct'){
+    padEl.style.display = 'none'; clickEl.style.display = 'none'; curEl.style.display = 'none';
+    G.pad = G.click = null;
+  } else {
+    const pw = Math.min(num('padWidth'), W * 0.45), ph = pw * H / W;
+    G.pad = { x: c.hand === 'L' ? em : W - em - pw, y: H - em - ph, w: pw, h: ph };
+    Object.assign(padEl.style, { display: 'block', left: G.pad.x+'px', top: G.pad.y+'px', width: pw+'px', height: ph+'px' });
+    if(CFG.selectMode === 'clicker'){
+      const cs = num('clickerSize');
+      G.click = { x: c.hand === 'L' ? W - em - cs : em, y: H - em - cs, w: cs, h: cs };
+      Object.assign(clickEl.style, { display: 'flex', left: G.click.x+'px', top: G.click.y+'px', width: cs+'px', height: cs+'px' });
+    } else { clickEl.style.display = 'none'; G.click = null; }
+  }
+  if(run.trial && run.phase === 'trial'){ G.cells[run.trial.r][run.trial.c].el.classList.add('target'); run.trial.resized = 1; }
+  drawCursor();
+}
+
+function presentTrial(){
+  if(run.i >= run.list.length){ endBlock(); return; }
+  G.cells.flat().forEach(c => c.el.className = 'cell');
+  const [r, c] = run.list[run.i];
+  const m = COND[run.cond].map;
+  if(m === 'relative'){
+    if(CFG.resetCursor === '1' || !run.cursor) run.cursor = { x: G.W/2, y: G.H/2 };
+  } else if(m === 'absolute'){
+    run.cursor = run.padId != null ? run.cursor : null;
+  }
+  run.trial = { r, c, t0: now(), startIso: new Date().toISOString(), first: null, errors: 0, misses: [],
+                padTouches: 0, path: 0, stray: 0, emptyClicks: 0, grip: 0, resized: 0,
+                cs: run.cursor ? { x: run.cursor.x, y: run.cursor.y } : null };
+  G.cells[r][c].el.classList.add('target');
+  progEl.textContent = `${run.block === 'practice' ? '연습 ' : ''}${run.i + 1} / ${run.list.length}`;
+  drawCursor();
+  run.phase = 'trial';
+}
+
+function drawCursor(){
+  if(run && run.cursor && COND[run.cond].map !== 'direct'){
+    curEl.style.display = 'block';
+    curEl.style.transform = `translate(${run.cursor.x - 2}px, ${run.cursor.y - 2}px)`;
+  } else curEl.style.display = 'none';
+}
+
+const inR = (p, b) => b && p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function cellAt(x, y){
+  for(let r = 0; r < G.cells.length; r++) for(let c = 0; c < G.cells[r].length; c++){
+    const k = G.cells[r][c]; if(x >= k.x && x <= k.x + k.w && y >= k.y && y <= k.y + k.h) return { r, c };
+  }
+  return null;
+}
+function ptOf(e){ const b = stage.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; }
+function moveCursorTo(x, y){
+  x = clamp(x, 0, G.W - 1); y = clamp(y, 0, G.H - 1);
+  if(run.cursor && run.trial) run.trial.path += Math.hypot(x - run.cursor.x, y - run.cursor.y);
+  run.cursor = { x, y }; drawCursor();
+}
+function absMap(p){
+  const u = clamp((p.x - G.pad.x) / G.pad.w, 0, 1), v = clamp((p.y - G.pad.y) / G.pad.h, 0, 1);
+  return { x: u * (G.W - 1), y: v * (G.H - 1) };
+}
+
+/* ---------- 일시정지 (왼쪽 위 원 길게 누르기 / Esc) ---------- */
+const holdEl = $('#hold'); let holdTimer = null, holdId = null;
+function openPause(){
+  if(!run) return;
+  clearTimeout(timer); run.phase = 'paused'; run.padId = null;
+  $('#pause').style.display = 'flex';
+}
+$('#pResume').onclick = () => { $('#pause').style.display = 'none'; presentTrial(); };
+$('#pRestart').onclick = () => { $('#pause').style.display = 'none'; beginBlock(run.cond, run.block); };
+$('#pQuit').onclick = () => {
+  $('#pause').style.display = 'none'; saveSes(); upload(SES); run = null;
+  show('setup'); checkResume(); renderSessions();
+};
+
+/* ---------- 입력 처리 ---------- */
+stage.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if(!run) return;
+  const p = ptOf(e);
+  if(inR(p, { x: 0, y: 0, w: 56, h: 46 })){                 // 일시정지 핫스팟
+    holdId = e.pointerId; holdEl.classList.add('charging');
+    holdTimer = setTimeout(() => { holdEl.classList.remove('charging'); openPause(); }, 1200);
+    return;
+  }
+  if(run.phase !== 'trial'){
+    if(G.pad && inR(p, G.pad) && run.padId == null){ run.padId = e.pointerId; run.last = p;
+      if(COND[run.cond].map === 'absolute') moveCursorTo(absMap(p).x, absMap(p).y); }
+    return;
+  }
+  const t = run.trial, m = COND[run.cond].map;
+  if(t.first == null) t.first = now();
+
+  if(m === 'direct'){
+    if(inR(p, G.grid)) select(p.x, p.y, 'tap'); else t.stray++;
+    return;
+  }
+  if(inR(p, G.pad) && run.padId == null){
+    run.padId = e.pointerId; t.padTouches++;
+    try { stage.setPointerCapture(e.pointerId); } catch(_){}
+    if(m === 'absolute'){ const a = absMap(p); moveCursorTo(a.x, a.y); }
+    run.last = p;
+    return;
+  }
+  if(G.click && inR(p, G.click)){
+    clickEl.classList.add('down'); setTimeout(() => clickEl.classList.remove('down'), 120);
+    if(run.cursor) select(run.cursor.x, run.cursor.y, 'click'); else t.emptyClicks++;
+    return;
+  }
+  t.stray++;
+}, { passive: false });
+
+stage.addEventListener('pointermove', e => {
+  if(!run || e.pointerId !== run.padId) return;
+  e.preventDefault();
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for(const ev of (evs.length ? evs : [e])){
+    const p = ptOf(ev);
+    if(COND[run.cond].map === 'absolute'){ const a = absMap(p); moveCursorTo(a.x, a.y); }
+    else if(run.last){
+      const g = num('gain');
+      if(!run.cursor) run.cursor = { x: G.W/2, y: G.H/2 };
+      moveCursorTo(run.cursor.x + (p.x - run.last.x) * g, run.cursor.y + (p.y - run.last.y) * g);
+    }
+    run.last = p;
+  }
+  if(run.trial && run.trial.first == null && run.phase === 'trial') run.trial.first = now();
+}, { passive: false });
+
+function pointerEnd(e){
+  if(e.pointerId === holdId){ clearTimeout(holdTimer); holdEl.classList.remove('charging'); holdId = null; return; }
+  if(!run || e.pointerId !== run.padId) return;
+  run.padId = null; run.last = null;
+  if(e.type === 'pointerup' && CFG.selectMode === 'release' && run.phase === 'trial' && run.cursor){
+    select(run.cursor.x, run.cursor.y, 'release');
+  }
+}
+stage.addEventListener('pointerup', pointerEnd);
+stage.addEventListener('pointercancel', pointerEnd);
+
+document.addEventListener('keydown', e => {
+  if(!run || !$('#task').classList.contains('on')) return;
+  if(e.key === 'Escape') openPause();
+  if(e.key === 'g' || e.key === 'G' || e.key === 'ㅎ'){   // 실험자가 자세 변경을 표시
+    if(run.phase === 'trial' && run.trial) run.trial.grip++;
+    else { const last = SES.trials[SES.trials.length - 1]; if(last && last.condition === run.cond) { last.grip_marks++; saveSes(); } }
+  }
+});
+['gesturestart','gesturechange','dblclick','contextmenu'].forEach(ev =>
+  document.addEventListener(ev, e => { if($('#task').classList.contains('on')) e.preventDefault(); }, { passive: false }));
+document.addEventListener('touchmove', e => { if($('#task').classList.contains('on')) e.preventDefault(); }, { passive: false });
+
+window.addEventListener('resize', () => { if(run && $('#task').classList.contains('on')) layout(); });
+
+/* ---------- 선택 판정 ---------- */
+function select(x, y, how){
+  const t = run.trial, hitCell = cellAt(x, y);
+  if(hitCell && hitCell.r === t.r && hitCell.c === t.c){ complete(x, y, how); return; }
+  t.errors++; t.misses.push(`${R(x)}:${R(y)}`);
+  if(hitCell){ const el = G.cells[hitCell.r][hitCell.c].el; el.classList.add('miss'); setTimeout(() => el.classList.remove('miss'), 180); }
+}
+
+function complete(x, y, how){
+  const t = run.trial, tEnd = now(), k = G.cells[t.r][t.c], c = COND[run.cond];
+  run.phase = 'iti';
+  SES.trials.push({
+    participant: SES.participant, session_id: SES.id, dominant_hand: SES.hand,
+    condition: run.cond, mapping: c.map, pad_hand: c.hand || '', condition_position: SES.condIdx + 1,
+    block: run.block, trial: run.i + 1,
+    target_row: t.r + 1, target_col: t.c + 1,
+    target_cx: R(k.x + k.w/2), target_cy: R(k.y + k.h/2), target_w: R(k.w), target_h: R(k.h),
+    cursor_start_x: t.cs ? R(t.cs.x) : '', cursor_start_y: t.cs ? R(t.cs.y) : '',
+    start_time: t.startIso,
+    movement_time_ms: R(tEnd - t.t0),
+    reaction_time_ms: t.first != null ? R(t.first - t.t0) : '',
+    errors: t.errors, first_attempt_hit: t.errors === 0 ? 1 : 0,
+    select_x: R(x), select_y: R(y), select_method: how,
+    pad_touches: t.padTouches, cursor_path_px: R(t.path), stray_touches: t.stray,
+    empty_clicks: t.emptyClicks, grip_marks: t.grip, miss_points: t.misses.join(' '), resized: t.resized,
+    screen_w: G.W, screen_h: G.H,
+    pad_w: G.pad ? R(G.pad.w) : '', pad_h: G.pad ? R(G.pad.h) : '',
+    gain: c.map === 'relative' ? num('gain') : '',
+    select_mode: c.map === 'direct' ? 'tap' : CFG.selectMode
+  });
+  saveSes();
+  k.el.classList.remove('target'); k.el.classList.add('hit');
+  run.i++;
+  clearTimeout(timer);
+  timer = setTimeout(presentTrial, num('iti'));
+}
+
+function endBlock(){
+  run.phase = 'wait'; curEl.style.display = 'none';
+  if(run.block === 'practice'){
+    $('#midStep').textContent = `조건 ${SES.condIdx + 1} / ${SES.order.length}  ${COND[run.cond].name}`;
+    show('mid'); return;
+  }
+  SES.condIdx++; saveSes();
+  const st = $('#introUp');
+  setUpStatus(st, 'busy');
+  upload(SES).then(ok => setUpStatus(st, ok ? 'ok' : 'fail'));
+  if(SES.condIdx < SES.order.length) showIntro(); else showSurvey();
+}
+
+/* ---------- 설문 ---------- */
+let ranking = {};
+function showSurvey(){
+  ranking = {};
+  const list = $('#rankList'); list.innerHTML = '';
+  $('#scaleMax').textContent = `${SES.order.length} = 가장 불편함`;
+  SES.order.forEach((key, i) => {
+    const b = document.createElement('button');
+    b.innerHTML = `<div class="n"></div><div class="t"><b>${COND[key].name}</b><span>${i + 1}번째로 해 본 방식, ${COND[key].ko}</span></div>`;
+    b.onclick = () => {
+      if(ranking[key]){                       // 지우면 뒤 순위를 당김
+        const gone = ranking[key]; delete ranking[key];
+        Object.keys(ranking).forEach(k => { if(ranking[k] > gone) ranking[k]--; });
+      } else ranking[key] = Object.keys(ranking).length + 1;
+      paint();
+    };
+    b.dataset.k = key; list.appendChild(b);
+  });
+  const paint = () => {
+    list.querySelectorAll('button').forEach(b => {
+      const v = ranking[b.dataset.k]; b.classList.toggle('set', !!v); b.querySelector('.n').textContent = v || '';
+    });
+    $('#surveyGo').disabled = Object.keys(ranking).length !== SES.order.length;
+  };
+  paint();
+  show('survey');
+}
+$('#surveyGo').onclick = () => {
+  SES.survey = { ranking: { ...ranking }, comment: $('#comment').value.trim(), time: new Date().toISOString() };
+  SES.done = true; SES.finished = new Date().toISOString();
+  saveSes(); store('qc_current', null);
+  $('#comment').value = '';
+  show('done');
+  finalUpload();
+};
+function finalUpload(){
+  const st = $('#doneUp'); setUpStatus(st, 'busy');
+  upload(SES).then(ok => setUpStatus(st, ok ? 'ok' : 'fail'));
+}
+$('#doneRetry').onclick = finalUpload;
+$('#doneDl').onclick = () => downloadSes(SES);
+$('#doneNext').onclick = () => {
+  SES = null; run = null; $('#pid').value = ''; $('#note').value = ''; chosenHand = null;
+  $('#handSeg').querySelectorAll('button').forEach(x => x.classList.remove('sel'));
+  show('setup'); checkResume(); renderSessions();
+};
+
+/* ---------- CSV / 업로드 ---------- */
+const COLS = ['participant','session_id','dominant_hand','condition','mapping','pad_hand','condition_position','block','trial',
+  'target_row','target_col','target_cx','target_cy','target_w','target_h','cursor_start_x','cursor_start_y','start_time',
+  'movement_time_ms','reaction_time_ms','errors','first_attempt_hit','select_x','select_y','select_method','pad_touches',
+  'cursor_path_px','stray_touches','empty_clicks','grip_marks','miss_points','resized','screen_w','screen_h','pad_w','pad_h',
+  'gain','select_mode'];
+const esc = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+const BOM = '\uFEFF';
+function trialsCsv(s){ return BOM + [COLS.join(',')].concat(s.trials.map(t => COLS.map(c => esc(t[c])).join(','))).join('\n'); }
+function surveyCsv(s){
+  const n = s.order.length;
+  const rows = s.order.map((k, i) => [s.participant, s.id, s.hand, k, COND[k].name, i + 1, s.survey.ranking[k], n + 1 - s.survey.ranking[k], s.survey.comment]);
+  return BOM + ['participant,session_id,dominant_hand,condition,condition_name,condition_position,rank,comfort_score,comment']
+    .concat(rows.map(r => r.map(esc).join(','))).join('\n');
+}
+function filesFor(s){
+  const base = `QuickCursor_${s.id}`;
+  const { trials, ...meta } = s;
+  const files = [
+    { name: `${base}_trials.csv`, content: trialsCsv(s), mimeType: 'text/csv' },
+    { name: `${base}_meta.json`, content: JSON.stringify(meta, null, 2), mimeType: 'application/json' },
+  ];
+  if(s.survey) files.push({ name: `${base}_survey.csv`, content: surveyCsv(s), mimeType: 'text/csv' });
+  return files;
+}
+async function post(payload){
+  const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const res = await fetch(CFG.scriptUrl, { method: 'POST', redirect: 'follow', signal: ctrl.signal,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+    const j = await res.json();
+    if(!j.ok) throw new Error(j.error || '알 수 없는 오류');
+    return j;
+  } finally { clearTimeout(to); }
+}
+async function upload(s){
+  if(!s) return false;
+  if(!CFG.scriptUrl){ s.uploadError = 'Drive 주소 미설정'; saveSes(s); return false; }
+  try {
+    await post({ token: CFG.token, files: filesFor(s) });
+    s.lastUpload = { time: new Date().toISOString(), trials: s.trials.length, survey: !!s.survey };
+    s.uploadError = null; saveSes(s); return true;
+  } catch(err){
+    s.uploadError = String(err.message || err); saveSes(s); return false;
+  }
+}
+const needsUpload = s => !s.lastUpload || s.lastUpload.trials !== s.trials.length || (!!s.survey !== s.lastUpload.survey);
+function setUpStatus(el, state){
+  el.className = 'status' + (state === 'ok' ? ' ok' : state === 'fail' ? ' bad' : '');
+  el.textContent = state === 'busy' ? 'Google Drive에 저장하는 중…'
+    : state === 'ok' ? 'Google Drive에 저장했습니다.'
+    : `Drive 저장에 실패했습니다 (${SES && SES.uploadError || '연결 오류'}). 데이터는 이 기기에 남아 있으니 나중에 다시 올리세요.`;
+}
+
+function download(name, text, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function downloadSes(s){
+  const f = filesFor(s).filter(x => x.name.endsWith('.csv'));
+  f.forEach((x, i) => setTimeout(() => download(x.name, x.content, 'text/csv'), i * 700));
+}
+
+/* ---------- 보관 데이터 목록 ---------- */
+function renderSessions(){
+  const box = $('#sessList'); box.innerHTML = '';
+  const ids = (load('qc_index') || []).slice().reverse();
+  if(!ids.length){ box.innerHTML = '<p class="hint">아직 진행한 실험이 없습니다.</p>'; return; }
+  let pending = 0;
+  ids.slice(0, 40).forEach(id => {
+    const s = load('qc_ses_' + id); if(!s) return;
+    const need = needsUpload(s); if(need) pending++;
+    const row = document.createElement('div'); row.className = 'sess';
+    const main = s.trials.filter(t => t.block === 'main').length;
+    row.innerHTML = `<div class="who"><b>${s.participant}</b> <span class="hint">${s.started.slice(0,16).replace('T',' ')}, 본 시행 ${main}회${s.done ? '' : ', 진행 중 멈춤'}</span></div>
+      <span class="tag ${need ? 'warn' : 'good'}">${need ? '업로드 필요' : 'Drive 저장됨'}</span>`;
+    const up = document.createElement('button'); up.className = 'btn small ghost'; up.textContent = '올리기';
+    up.onclick = async () => { up.disabled = true; up.textContent = '저장 중…'; await upload(s); renderSessions(); };
+    const dl = document.createElement('button'); dl.className = 'btn small ghost'; dl.textContent = 'CSV';
+    dl.onclick = () => downloadSes(s);
+    row.append(up, dl); box.appendChild(row);
+  });
+  if(pending) $('#dataBox').open = true;
+}
+
+$('#pingBtn').onclick = async () => {
+  const st = $('#pingStatus');
+  if(!CFG.scriptUrl){ st.className = 'status bad'; st.textContent = '웹 앱 주소를 먼저 입력하세요.'; return; }
+  st.className = 'status'; st.textContent = '확인하는 중…';
+  try {
+    const j = await post({ token: CFG.token, ping: true });
+    st.className = 'status ok'; st.textContent = `연결됨. 결과는 Drive의 "${j.folder}" 폴더에 저장됩니다.`;
+  } catch(err){
+    st.className = 'status bad';
+    st.textContent = `연결 실패: ${err.message || err}. 주소가 /exec로 끝나는지, 배포 액세스가 "모든 사용자"인지 확인하세요.`;
+  }
+};
+
+checkResume(); renderSessions();
+})();
+</script>
+</body>
+</html>
