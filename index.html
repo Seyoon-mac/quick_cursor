@@ -265,7 +265,7 @@ const store = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); retur
 
 const DEF = { scriptUrl:'https://script.google.com/macros/s/AKfycbygdIdGEpvOlviQFVdVDq01gvWJLwK7lCQt0HiashLGZsd4B6P8-jjgG4rmDfi3KSWC/exec',
               token:'team8-qc-7f3k9x2m',
-              cols:9, rows:6, reps:1, practice:5, padWidth:300, gain:3,
+              cols:9, rows:6, reps:3, practice:5, padWidth:300, gain:3,
               clickerSize:110, iti:400, selectMode:'clicker', orderMode:'latin', resetCursor:'1' };
 const CFG = Object.assign({}, DEF, load('qc_cfg') || {});
 if(!CFG.scriptUrl) CFG.scriptUrl = DEF.scriptUrl;
@@ -634,11 +634,14 @@ stage.addEventListener('pointermove', e => {
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
   for(const ev of (evs.length ? evs : [e])){
     const p = ptOf(ev);
-    if(COND[run.cond].map === 'absolute'){ const a = absMap(p); moveCursorTo(a.x, a.y); }
-    else if(run.last){
-      const g = num('gain');
-      if(!run.cursor) run.cursor = { x: G.W/2, y: G.H/2 };
-      moveCursorTo(run.cursor.x + (p.x - run.last.x) * g, run.cursor.y + (p.y - run.last.y) * g);
+    if(COND[run.cond].map === 'absolute'){
+      if(inR(p, G.pad)) moveCursorTo(absMap(p).x, absMap(p).y);
+    } else if(run.last){
+      if(inR(p, G.pad)){
+        const g = num('gain');
+        if(!run.cursor) run.cursor = { x: G.W/2, y: G.H/2 };
+        moveCursorTo(run.cursor.x + (p.x - run.last.x) * g, run.cursor.y + (p.y - run.last.y) * g);
+      }
     }
     run.last = p;
   }
