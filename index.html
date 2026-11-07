@@ -277,9 +277,13 @@ const KEYS = Object.keys(COND);
 const load  = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
 const store = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } };
 
-const DEF = { scriptUrl:'', token:'', cols:9, rows:6, reps:1, practice:5, padWidth:300, gain:3,
+const DEF = { scriptUrl:'https://script.google.com/macros/s/AKfycbygdIdGEpvOlviQFVdVDq01gvWJLwK7lCQt0HiashLGZsd4B6P8-jjgG4rmDfi3KSWC/exec',
+              token:'team8-qc-7f3k9x2m',
+              cols:9, rows:6, reps:1, practice:5, padWidth:300, gain:3,
               clickerSize:110, iti:400, selectMode:'clicker', orderMode:'latin', resetCursor:'1' };
 const CFG = Object.assign({}, DEF, load('qc_cfg') || {});
+if(!CFG.scriptUrl) CFG.scriptUrl = DEF.scriptUrl;
+if(!CFG.token)     CFG.token     = DEF.token;
 const saveCfg = () => store('qc_cfg', CFG);
 const num = k => Number(CFG[k]);
 
@@ -371,11 +375,12 @@ $('#startBtn').addEventListener('click', () => {
   SES = {
     id: `${pid}_${stamp(d)}`, appVersion: APP_VERSION, participant: pid, hand: chosenHand, note: $('#note').value.trim(),
     started: d.toISOString(), order: o.order, orderMethod: o.method, condIdx: 0,
-    trials: [], survey: null, done: false, lastUpload: null, cfg: cfgCopy,
+    trials: [], orientation: [], survey: null, done: false, lastUpload: null, cfg: cfgCopy,
     device: { ua: navigator.userAgent, screenW: screen.width, screenH: screen.height, dpr: devicePixelRatio,
               standalone: !!navigator.standalone }
   };
   saveSes(); store('qc_current', SES.id);
+  enableOrientation();
   goFullscreen();
   showIntro();
 });
@@ -390,6 +395,8 @@ function checkResume(){
     $('#resumeText').innerHTML = `<b>${s.participant}</b>의 실험이 중간에 멈춰 있습니다. ${where} 다시 시작할 수 있어요.`;
     $('#resumeBtn').onclick = () => {
       SES = s;
+      if(!SES.orientation) SES.orientation = [];
+      enableOrientation();
       if(SES.condIdx < SES.order.length){
         const c = SES.order[SES.condIdx];
         SES.trials = SES.trials.filter(t => t.condition !== c);  // 끊긴 조건은 처음부터
@@ -462,6 +469,34 @@ function makeList(block){
 const stage = $('#stage'), padEl = $('#pad'), clickEl = $('#clicker'), curEl = $('#cursor'), progEl = $('#progress');
 let timer = null;
 
+/* ---------- 기기 기울기 ---------- */
+let orientActive = false, orientLast = 0;
+
+function handleOrientation(e){
+  if(!orientActive || !SES || SES.done) return;
+  const t = performance.now();
+  if(t - orientLast < 500) return;
+  orientLast = t;
+  SES.orientation.push([
+    Date.now() - Date.parse(SES.started),
+    Math.round((e.beta  || 0) * 10) / 10,
+    Math.round((e.gamma || 0) * 10) / 10
+  ]);
+}
+
+async function enableOrientation(){
+  if(!orientActive){
+    if(typeof DeviceOrientationEvent !== 'undefined' &&
+       typeof DeviceOrientationEvent.requestPermission === 'function'){
+      try { if(await DeviceOrientationEvent.requestPermission() !== 'granted') return; }
+      catch(e){ return; }
+    }
+    window.addEventListener('deviceorientation', handleOrientation);
+    orientActive = true;
+  }
+  orientLast = 0;
+}
+
 function beginBlock(cond, block){
   if(block === 'main') SES.trials = SES.trials.filter(t => !(t.condition === cond && t.block === 'main'));
   run = { cond, block, list: makeList(block), i: 0, trial: null, phase: 'wait', padId: null, cursor: null, last: null };
@@ -521,7 +556,7 @@ function presentTrial(){
     run.cursor = run.padId != null ? run.cursor : null;
   }
   run.trial = { r, c, t0: now(), startIso: new Date().toISOString(), first: null, errors: 0, misses: [],
-                padTouches: 0, path: 0, stray: 0, emptyClicks: 0, grip: 0, resized: 0,
+                padTouches: 0, path: 0, stray: 0, emptyClicks: 0, resized: 0,
                 cs: run.cursor ? { x: run.cursor.x, y: run.cursor.y } : null };
   G.cells[r][c].el.classList.add('target');
   progEl.textContent = `${run.block === 'practice' ? '연습 ' : ''}${run.i + 1} / ${run.list.length}`;
@@ -637,10 +672,6 @@ stage.addEventListener('pointercancel', pointerEnd);
 document.addEventListener('keydown', e => {
   if(!run || !$('#task').classList.contains('on')) return;
   if(e.key === 'Escape') openPause();
-  if(e.key === 'g' || e.key === 'G' || e.key === 'ㅎ'){   // 실험자가 자세 변경을 표시
-    if(run.phase === 'trial' && run.trial) run.trial.grip++;
-    else { const last = SES.trials[SES.trials.length - 1]; if(last && last.condition === run.cond) { last.grip_marks++; saveSes(); } }
-  }
 });
 ['gesturestart','gesturechange','dblclick','contextmenu'].forEach(ev =>
   document.addEventListener(ev, e => { if($('#task').classList.contains('on')) e.preventDefault(); }, { passive: false }));
@@ -672,7 +703,7 @@ function complete(x, y, how){
     errors: t.errors, first_attempt_hit: t.errors === 0 ? 1 : 0,
     select_x: R(x), select_y: R(y), select_method: how,
     pad_touches: t.padTouches, cursor_path_px: R(t.path), stray_touches: t.stray,
-    empty_clicks: t.emptyClicks, grip_marks: t.grip, miss_points: t.misses.join(' '), resized: t.resized,
+    empty_clicks: t.emptyClicks, miss_points: t.misses.join(' '), resized: t.resized,
     screen_w: G.W, screen_h: G.H,
     pad_w: G.pad ? R(G.pad.w) : '', pad_h: G.pad ? R(G.pad.h) : '',
     gain: c.map === 'relative' ? num('gain') : '',
@@ -749,7 +780,7 @@ $('#doneNext').onclick = () => {
 const COLS = ['participant','session_id','dominant_hand','condition','mapping','pad_hand','condition_position','block','trial',
   'target_row','target_col','target_cx','target_cy','target_w','target_h','cursor_start_x','cursor_start_y','start_time',
   'movement_time_ms','reaction_time_ms','errors','first_attempt_hit','select_x','select_y','select_method','pad_touches',
-  'cursor_path_px','stray_touches','empty_clicks','grip_marks','miss_points','resized','screen_w','screen_h','pad_w','pad_h',
+  'cursor_path_px','stray_touches','empty_clicks','miss_points','resized','screen_w','screen_h','pad_w','pad_h',
   'gain','select_mode'];
 const esc = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
 const BOM = '\uFEFF';
@@ -762,12 +793,17 @@ function surveyCsv(s){
 }
 function filesFor(s){
   const base = `QuickCursor_${s.id}`;
-  const { trials, ...meta } = s;
+  const { trials, orientation, ...meta } = s;
   const files = [
     { name: `${base}_trials.csv`, content: trialsCsv(s), mimeType: 'text/csv' },
     { name: `${base}_meta.json`, content: JSON.stringify(meta, null, 2), mimeType: 'application/json' },
   ];
   if(s.survey) files.push({ name: `${base}_survey.csv`, content: surveyCsv(s), mimeType: 'text/csv' });
+  if(s.orientation && s.orientation.length){
+    const oriCsv = BOM + 't_ms,beta,gamma\n' +
+      s.orientation.map(([t,b,g]) => `${t},${b},${g}`).join('\n');
+    files.push({ name: `${base}_orientation.csv`, content: oriCsv, mimeType: 'text/csv' });
+  }
   return files;
 }
 async function post(payload){
