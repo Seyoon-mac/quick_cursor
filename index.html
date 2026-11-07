@@ -109,7 +109,7 @@ summary{font-size:20px;font-weight:650;padding:12px 0;list-style-position:inside
 <section class="screen on" id="setup">
  <div class="wrap">
   <h1>QuickCursor 실험</h1>
-  <p class="sub">CSE333 Team 8. 참가자 정보를 입력하고 실험을 시작하세요.</p>
+  <p class="sub">CSE333 Team 8. 참가자 정보를 입력하고 실험을 시작하세요. <span id="ver"></span></p>
 
   <div id="resumeBox" style="display:none;margin-top:22px;padding:16px;border-radius:12px;background:var(--panel)">
    <div id="resumeText" style="font-size:16px"></div>
@@ -258,6 +258,7 @@ summary{font-size:20px;font-weight:650;padding:12px 0;list-style-position:inside
 <script>
 (() => {
 'use strict';
+const APP_VERSION = '1.0';
 const $ = s => document.querySelector(s);
 const now = () => performance.now();
 const R = Math.round;
@@ -368,7 +369,7 @@ $('#startBtn').addEventListener('click', () => {
   const d = new Date(), o = orderFor(pid);
   const { scriptUrl, token, ...cfgCopy } = CFG;
   SES = {
-    id: `${pid}_${stamp(d)}`, participant: pid, hand: chosenHand, note: $('#note').value.trim(),
+    id: `${pid}_${stamp(d)}`, appVersion: APP_VERSION, participant: pid, hand: chosenHand, note: $('#note').value.trim(),
     started: d.toISOString(), order: o.order, orderMethod: o.method, condIdx: 0,
     trials: [], survey: null, done: false, lastUpload: null, cfg: cfgCopy,
     device: { ua: navigator.userAgent, screenW: screen.width, screenH: screen.height, dpr: devicePixelRatio,
@@ -844,6 +845,7 @@ $('#pingBtn').onclick = async () => {
   }
 };
 
+$('#ver').textContent = 'v' + APP_VERSION;
 checkResume(); renderSessions();
 })();
 </script>
