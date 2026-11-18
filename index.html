@@ -265,7 +265,7 @@ const store = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); retur
 
 const DEF = { scriptUrl:'https://script.google.com/macros/s/AKfycbygdIdGEpvOlviQFVdVDq01gvWJLwK7lCQt0HiashLGZsd4B6P8-jjgG4rmDfi3KSWC/exec',
               token:'team8-qc-7f3k9x2m',
-              cols:9, rows:6, reps:3, practice:5, padWidth:300, gain:3,
+              cols:9, rows:6, reps:2, practice:5, padWidth:300, gain:3,
               clickerSize:110, iti:400, selectMode:'clicker', orderMode:'latin', resetCursor:'1' };
 const CFG = Object.assign({}, DEF, load('qc_cfg') || {});
 if(!CFG.scriptUrl) CFG.scriptUrl = DEF.scriptUrl;
