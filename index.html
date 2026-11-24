@@ -266,7 +266,7 @@ const store = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); retur
 const DEF = { scriptUrl:'https://script.google.com/macros/s/AKfycbygdIdGEpvOlviQFVdVDq01gvWJLwK7lCQt0HiashLGZsd4B6P8-jjgG4rmDfi3KSWC/exec',
               token:'team8-qc-7f3k9x2m',
               cols:9, rows:6, reps:2, practice:5, padWidth:300, gain:3,
-              clickerSize:110, iti:400, selectMode:'clicker', orderMode:'latin', resetCursor:'1' };
+              clickerSize:110, iti:400, selectMode:'clicker', orderMode:'latin', resetCursor:'0' };
 const CFG = Object.assign({}, DEF, load('qc_cfg') || {});
 if(!CFG.scriptUrl) CFG.scriptUrl = DEF.scriptUrl;
 if(!CFG.token)     CFG.token     = DEF.token;
@@ -688,10 +688,9 @@ function complete(x, y, how){
     });
     saveSes();
   }
-  k.el.classList.remove('target'); k.el.classList.add('hit');
   run.i++;
   clearTimeout(timer);
-  timer = setTimeout(presentTrial, num('iti'));
+  presentTrial();
 }
 
 function endBlock(){
